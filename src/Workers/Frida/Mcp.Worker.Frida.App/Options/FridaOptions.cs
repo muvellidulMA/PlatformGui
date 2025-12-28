@@ -15,4 +15,6 @@ public sealed class FridaOptions
     public string[] PythonArgs { get; set; } = Array.Empty<string>();
     public string? HelperScriptPath { get; set; }
     public string? HookerScriptPath { get; set; }
+    public string? ScriptHostPath { get; set; }
+    public string[] BlockedTools { get; set; } = Array.Empty<string>();
 }

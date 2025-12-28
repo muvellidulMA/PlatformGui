@@ -9,6 +9,8 @@ builder.Services.AddSingleton(fridaOptions);
 builder.Services.AddSingleton<FridaSessionStore>();
 builder.Services.AddSingleton<FridaCli>();
 builder.Services.AddSingleton<FridaHookManager>();
+builder.Services.AddSingleton<FridaScriptManager>();
+builder.Services.AddSingleton<FridaToolPolicy>();
 
 builder.WebHost.ConfigureKestrel(options =>
 {

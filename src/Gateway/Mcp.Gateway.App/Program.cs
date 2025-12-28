@@ -65,6 +65,36 @@ if (enableHttp)
         await sse.WaitForDisconnectAsync(sessionId, ctx.RequestAborted);
     });
 
+    app.MapPost("/sse", async (HttpContext ctx, GatewayAuth auth, McpMessageHandler handler) =>
+    {
+        if (!auth.IsAuthorized(ctx))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        using var reader = new StreamReader(ctx.Request.Body);
+        var body = await reader.ReadToEndAsync();
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await ctx.Response.WriteAsync("govde bos");
+            return;
+        }
+
+        var responseJson = await handler.HandleAsync(body, null, ctx.RequestAborted);
+        if (string.IsNullOrWhiteSpace(responseJson))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status202Accepted;
+            await ctx.Response.WriteAsync("Accepted");
+            return;
+        }
+
+        ctx.Response.StatusCode = StatusCodes.Status200OK;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsync(responseJson);
+    });
+
     app.MapPost("/message", async (HttpContext ctx, GatewayAuth auth, SseSessionManager sse, McpMessageHandler handler) =>
     {
         if (!auth.IsAuthorized(ctx))

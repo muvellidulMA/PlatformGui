@@ -113,6 +113,25 @@ public sealed class FridaCli
             ["arg-values"] = argValuesJson
         }, cancellationToken);
 
+    public async Task<JsonElement> SpawnAsync(string program, string argsJson, CancellationToken cancellationToken)
+        => await RunHelperAsync("spawn", new Dictionary<string, string>
+        {
+            ["program"] = program,
+            ["args"] = argsJson
+        }, cancellationToken);
+
+    public async Task<JsonElement> ResumeAsync(int pid, CancellationToken cancellationToken)
+        => await RunHelperAsync("resume", new Dictionary<string, string>
+        {
+            ["pid"] = pid.ToString()
+        }, cancellationToken);
+
+    public async Task<JsonElement> KillAsync(int pid, CancellationToken cancellationToken)
+        => await RunHelperAsync("kill", new Dictionary<string, string>
+        {
+            ["pid"] = pid.ToString()
+        }, cancellationToken);
+
     private async Task<ExecResult> RunFridaPsAsync(bool useJson, CancellationToken cancellationToken)
     {
         var args = BuildFridaPsArgs(useJson);

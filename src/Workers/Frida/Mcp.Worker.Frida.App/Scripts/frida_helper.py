@@ -120,11 +120,16 @@ def read_memory(device, pid, address, size, timeout_ms):
         addr_json = json.dumps(address)
         source = (
             "'use strict';"
-            "function toHex(u8){var h='';for(var i=0;i<u8.length;i++){var b=u8[i].toString(16);if(b.length<2)b='0'+b;h+=b;}return h;}"
+            "function toHexFromBytes(list){var h='';for(var i=0;i<list.length;i++){var b=list[i].toString(16);if(b.length<2)b='0'+b;h+=b;}return h;}"
+            "function readBytes(addr,size){"
+            "  var list=[];"
+            "  for(var i=0;i<size;i++){list.push(addr.add(i).readU8());}"
+            "  return list;"
+            "}"
             "setImmediate(function(){try{"
             f"var addr=ptr({addr_json});var size={size};"
-            "var bytes=Memory.readByteArray(addr,size);"
-            "if(bytes===null){send({error:'null'});}else{send({data:toHex(new Uint8Array(bytes)),size:size});}"
+            "var bytes=readBytes(addr,size);"
+            "send({data:toHexFromBytes(bytes),size:size});"
             "}catch(e){send({error:e.message});}});"
         )
         payload = run_script(session, source, timeout_ms)
@@ -142,10 +147,24 @@ def read_string(device, pid, address, max_length, encoding, timeout_ms):
         encoding_json = json.dumps(encoding)
         source = (
             "'use strict';"
+            "function readUtf8(addr,maxLen){"
+            "  var bytes=[];"
+            "  for(var i=0;i<maxLen;i++){var b=addr.add(i).readU8();if(b===0)break;bytes.push(b);}"
+            "  if(typeof TextDecoder==='function'){return new TextDecoder('utf-8').decode(Uint8Array.from(bytes));}"
+            "  var s='';for(var i=0;i<bytes.length;i++){s+=String.fromCharCode(bytes[i]);}return s;"
+            "}"
+            "function readUtf16(addr,maxLen){"
+            "  var s='';"
+            "  for(var i=0;i<maxLen;i++){var code=addr.add(i*2).readU16();if(code===0)break;s+=String.fromCharCode(code);}return s;"
+            "}"
             "setImmediate(function(){try{"
             f"var addr=ptr({addr_json});var maxLen={max_length};var enc={encoding_json};"
             "var s='';"
-            "if(enc==='utf16' || enc==='utf-16'){s=Memory.readUtf16String(addr,maxLen);}else{s=Memory.readUtf8String(addr,maxLen);}"
+            "if(enc==='utf16' || enc==='utf-16'){"
+            "  if(typeof addr.readUtf16String==='function'){s=addr.readUtf16String(maxLen);}else if(typeof Memory.readUtf16String==='function'){s=Memory.readUtf16String(addr,maxLen);}else{s=readUtf16(addr,maxLen);}"
+            "}else{"
+            "  if(typeof addr.readUtf8String==='function'){s=addr.readUtf8String(maxLen);}else if(typeof Memory.readUtf8String==='function'){s=Memory.readUtf8String(addr,maxLen);}else{s=readUtf8(addr,maxLen);}"
+            "}"
             "send({data:s});"
             "}catch(e){send({error:e.message});}});"
         )
@@ -187,7 +206,7 @@ def write_memory(device, pid, address, hex_data, timeout_ms):
         source = (
             "'use strict';"
             "function hexToBytes(hex){"
-            "  var clean=hex.replace(/[^0-9a-fA-F]/g,'');"
+            "  var clean=String(hex).replace(/[^0-9a-fA-F]/g,'');"
             "  var out=[];"
             "  for(var i=0;i<clean.length;i+=2){out.push(parseInt(clean.substr(i,2),16));}"
             "  return out;"
@@ -195,7 +214,13 @@ def write_memory(device, pid, address, hex_data, timeout_ms):
             "setImmediate(function(){try{"
             f"var addr=ptr({addr_json});var hex={hex_json};"
             "var bytes=hexToBytes(hex);"
-            "Memory.writeByteArray(addr, bytes);"
+            "if (typeof Memory !== 'undefined' && typeof Memory.writeByteArray === 'function') {"
+            "  Memory.writeByteArray(addr, bytes);"
+            "} else if (typeof addr.writeByteArray === 'function') {"
+            "  addr.writeByteArray(bytes);"
+            "} else {"
+            "  for (var i = 0; i < bytes.length; i++) { addr.add(i).writeU8(bytes[i]); }"
+            "}"
             "send({data:{written:bytes.length}});"
             "}catch(e){send({error:e.message});}});"
         )
@@ -219,7 +244,16 @@ def call_function(device, pid, address, ret_type, arg_types, args, timeout_ms):
             "function toArg(val, type){"
             "  if(type==='pointer'){return ptr(val);}"
             "  if(type==='int'){return parseInt(val);} "
-            "  if(type==='uint64'){return uint64(val);} "
+            "  if(type==='int64'){"
+            "    if(typeof int64==='function'){return int64(val);} "
+            "    if(typeof Int64==='function'){return new Int64(val);} "
+            "    return ptr(val);"
+            "  }"
+            "  if(type==='uint64'){"
+            "    if(typeof uint64==='function'){return uint64(val);} "
+            "    if(typeof UInt64==='function'){return new UInt64(val);} "
+            "    return ptr(val);"
+            "  }"
             "  if(type==='uint32'){return parseInt(val)>>>0;} "
             "  return ptr(val);"
             "}"
@@ -232,7 +266,13 @@ def call_function(device, pid, address, ret_type, arg_types, args, timeout_ms):
             "var jsArgs=[];"
             "for(var i=0;i<argTypes.length;i++){jsArgs.push(toArg(argValues[i], argTypes[i]));}"
             "var res=fn.apply(null, jsArgs);"
-            "send({data:{result:res.toString()}});"
+            "if(res===undefined || res===null){"
+            "  send({data:{result:null}});"
+            "}else if(typeof res==='object' && typeof res.toString==='function'){"
+            "  send({data:{result:res.toString()}});"
+            "}else{"
+            "  send({data:{result:String(res)}});"
+            "}"
             "}catch(e){send({error:e.message});}});"
         )
         payload = run_script(session, source, timeout_ms)
@@ -242,6 +282,23 @@ def call_function(device, pid, address, ret_type, arg_types, args, timeout_ms):
     finally:
         session.detach()
 
+def spawn_process(device, program, args):
+    argv = [program]
+    if args:
+        argv.extend(args)
+    pid = device.spawn(argv)
+    return {"pid": pid, "argv": argv}
+
+
+def resume_process(device, pid):
+    device.resume(pid)
+    return {"pid": pid, "resumed": True}
+
+
+def kill_process(device, pid):
+    device.kill(pid)
+    return {"pid": pid, "killed": True}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -249,6 +306,8 @@ def main():
     parser.add_argument("--device", default="local")
     parser.add_argument("--remote-host")
     parser.add_argument("--pid", type=int)
+    parser.add_argument("--program")
+    parser.add_argument("--args")
     parser.add_argument("--module")
     parser.add_argument("--address")
     parser.add_argument("--size", type=int, default=0)
@@ -303,6 +362,24 @@ def main():
             arg_types = json.loads(args.arg_types)
             arg_values = json.loads(args.arg_values)
             data = call_function(device, args.pid, args.address, ret_type, arg_types, arg_values, args.timeout_ms)
+        elif args.op == "spawn":
+            if not args.program:
+                raise RuntimeError("program gerekli")
+            argv = []
+            if args.args:
+                try:
+                    argv = json.loads(args.args)
+                except Exception as exc:
+                    raise RuntimeError(f"args json gecersiz: {exc}")
+            data = spawn_process(device, args.program, argv)
+        elif args.op == "resume":
+            if args.pid is None:
+                raise RuntimeError("pid gerekli")
+            data = resume_process(device, args.pid)
+        elif args.op == "kill":
+            if args.pid is None:
+                raise RuntimeError("pid gerekli")
+            data = kill_process(device, args.pid)
         else:
             raise RuntimeError("bilinmeyen op")
 

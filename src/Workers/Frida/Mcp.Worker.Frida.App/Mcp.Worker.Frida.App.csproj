@@ -18,6 +18,7 @@
   <ItemGroup>
     <None Include="Scripts\frida_helper.py" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Scripts\frida_hooker.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Scripts\frida_script_host.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
