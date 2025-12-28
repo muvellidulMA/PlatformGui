@@ -346,8 +346,8 @@ namespace Mcp.Worker.Frida.App.Services
                     return BuildErrorReply(ErrorNotFound, error);
 
                 var payload = JsonSerializer.SerializeToElement(new { });
-                var data = await _sessionManager.CallAsync(sessionId, "list_modules", payload, _options.TimeoutMs, cancellationToken);
-                return BuildOkReply(data);
+                var sessionData = await _sessionManager.CallAsync(sessionId, "list_modules", payload, _options.TimeoutMs, cancellationToken);
+                return BuildOkReply(sessionData);
             }
 
             if (!TryResolvePid(args, out var pid, out error))
@@ -371,8 +371,8 @@ namespace Mcp.Worker.Frida.App.Services
                     return BuildErrorReply(ErrorNotFound, error);
 
                 var payload = JsonSerializer.SerializeToElement(new { module = moduleName });
-                var data = await _sessionManager.CallAsync(sessionId, "list_exports", payload, _options.TimeoutMs, cancellationToken);
-                return BuildOkReply(data);
+                var sessionData = await _sessionManager.CallAsync(sessionId, "list_exports", payload, _options.TimeoutMs, cancellationToken);
+                return BuildOkReply(sessionData);
             }
 
             if (!TryResolvePid(args, out var pid, out error))
@@ -618,8 +618,8 @@ namespace Mcp.Worker.Frida.App.Services
                     return BuildErrorReply(ErrorNotFound, error);
 
                 var payload = JsonSerializer.SerializeToElement(new { address = addressText, size, pattern });
-                var data = await _sessionManager.CallAsync(sessionId, "scan_memory", payload, _options.TimeoutMs, cancellationToken);
-                return BuildOkReply(data);
+                var sessionData = await _sessionManager.CallAsync(sessionId, "scan_memory", payload, _options.TimeoutMs, cancellationToken);
+                return BuildOkReply(sessionData);
             }
 
             if (!TryResolvePid(args, out var pid, out error))
@@ -646,8 +646,8 @@ namespace Mcp.Worker.Frida.App.Services
                     return BuildErrorReply(ErrorNotFound, error);
 
                 var payload = JsonSerializer.SerializeToElement(new { address = addressText, dataHex });
-                var data = await _sessionManager.CallAsync(sessionId, "write_memory", payload, _options.TimeoutMs, cancellationToken);
-                return BuildOkReply(data);
+                var sessionData = await _sessionManager.CallAsync(sessionId, "write_memory", payload, _options.TimeoutMs, cancellationToken);
+                return BuildOkReply(sessionData);
             }
 
             if (!TryResolvePid(args, out var pid, out error))
@@ -693,8 +693,8 @@ namespace Mcp.Worker.Frida.App.Services
                     argTypes = JsonSerializer.Deserialize<string[]>(argTypesElement.GetRawText()) ?? Array.Empty<string>(),
                     argValues = JsonSerializer.Deserialize<object[]>(argValuesElement.GetRawText()) ?? Array.Empty<object>()
                 });
-                var data = await _sessionManager.CallAsync(sessionId, "call_function", payload, _options.TimeoutMs, cancellationToken);
-                return BuildOkReply(data);
+                var sessionData = await _sessionManager.CallAsync(sessionId, "call_function", payload, _options.TimeoutMs, cancellationToken);
+                return BuildOkReply(sessionData);
             }
 
             var data = await _cli.CallFunctionAsync(
