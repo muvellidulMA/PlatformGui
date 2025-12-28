@@ -310,7 +310,7 @@ namespace Mcp.Worker.Frida.App.Services
         private async Task<InvokeToolReply> HandleAttachAsync(string argsJson, CancellationToken cancellationToken)
         {
             if (!TryParseArgs(argsJson, out var args, out var error))
-                return BuildErrorReply(ErrorInvalidArgs, error);
+                return BuildErrorReply(ErrorInvalidArgs, error ?? "argsJson gecersiz");
 
             if (!TryGetInt(args, "pid", out var pid))
                 return BuildErrorReply(ErrorInvalidArgs, "pid gerekli");
