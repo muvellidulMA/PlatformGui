@@ -24,6 +24,8 @@ public sealed class FridaScriptManager
         public Process Process { get; }
         public string ScriptPath { get; }
         public StreamWriter Input { get; }
+        public bool IsExited { get; set; }
+        public int ExitCode { get; set; }
         public ConcurrentQueue<string> Events { get; } = new();
         public ConcurrentDictionary<string, TaskCompletionSource<string>> PendingRpc { get; } = new(StringComparer.OrdinalIgnoreCase);
         public CancellationTokenSource Cancellation { get; } = new();
@@ -37,6 +39,7 @@ public sealed class FridaScriptManager
     {
         _options = options;
         _logger = logger;
+        CleanupTempFiles("frida_script_", TimeSpan.FromHours(24));
     }
 
     public string StartScript(int pid, string source)
@@ -70,6 +73,12 @@ public sealed class FridaScriptManager
                 break;
 
             list.Add(evt);
+        }
+
+        if (instance.IsExited && instance.Events.IsEmpty)
+        {
+            if (_scripts.TryRemove(scriptId, out var removed))
+                FinalizeScript(removed);
         }
 
         return list;
@@ -136,10 +145,7 @@ public sealed class FridaScriptManager
         {
         }
 
-        instance.Cancellation.Cancel();
-        TryKill(instance.Process);
-        instance.Cancellation.Dispose();
-        TryDelete(instance.ScriptPath);
+        FinalizeScript(instance);
         return true;
     }
 
@@ -234,7 +240,18 @@ public sealed class FridaScriptManager
         foreach (var pair in instance.PendingRpc)
             pair.Value.TrySetCanceled();
 
-        _scripts.TryRemove(instance.ScriptId, out _);
+        instance.IsExited = true;
+        instance.ExitCode = instance.Process.HasExited ? instance.Process.ExitCode : -1;
+        instance.Events.Enqueue(JsonSerializer.Serialize(new { type = "process_exit", scriptId = instance.ScriptId, pid = instance.Pid, exitCode = instance.ExitCode }));
+        instance.Cancellation.Cancel();
+        TryDelete(instance.ScriptPath);
+    }
+
+    private static void FinalizeScript(ScriptInstance instance)
+    {
+        instance.Cancellation.Cancel();
+        TryKill(instance.Process);
+        instance.Cancellation.Dispose();
         TryDelete(instance.ScriptPath);
     }
 
@@ -359,6 +376,31 @@ public sealed class FridaScriptManager
         {
             if (File.Exists(path))
                 File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void CleanupTempFiles(string prefix, TimeSpan maxAge)
+    {
+        try
+        {
+            var temp = Path.GetTempPath();
+            var files = Directory.GetFiles(temp, $"{prefix}*.js");
+            var cutoff = DateTime.UtcNow - maxAge;
+            foreach (var file in files)
+            {
+                try
+                {
+                    var info = new FileInfo(file);
+                    if (info.LastWriteTimeUtc < cutoff)
+                        info.Delete();
+                }
+                catch
+                {
+                }
+            }
         }
         catch
         {

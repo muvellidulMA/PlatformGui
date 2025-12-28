@@ -178,53 +178,19 @@ public sealed class HookStreamManager
     private static bool TryExtractHookId(string? rawResultJson, out string hookId)
     {
         hookId = string.Empty;
-        if (string.IsNullOrWhiteSpace(rawResultJson))
+        if (!TryParsePayload(rawResultJson, out var payload))
             return false;
 
-        try
-        {
-            using var doc = JsonDocument.Parse(rawResultJson);
-            if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0)
-            {
-                var item = doc.RootElement[0];
-                if (item.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
-                {
-                    var text = textElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(text))
-                        return TryExtractHookIdFromPayload(text, out hookId);
-                }
-            }
-            else if (doc.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                return TryExtractHookIdFromPayload(doc.RootElement.GetRawText(), out hookId);
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        return false;
+        return TryExtractHookIdFromElement(payload, out hookId);
     }
 
     private static bool TryExtractHookIdFromPayload(string payloadJson, out string hookId)
     {
         hookId = string.Empty;
-        try
-        {
-            using var payloadDoc = JsonDocument.Parse(payloadJson);
-            if (payloadDoc.RootElement.ValueKind == JsonValueKind.Object &&
-                payloadDoc.RootElement.TryGetProperty("hookId", out var hookElement) &&
-                hookElement.ValueKind == JsonValueKind.String)
-            {
-                hookId = hookElement.GetString() ?? string.Empty;
-                return !string.IsNullOrWhiteSpace(hookId);
-            }
-        }
-        catch (JsonException)
-        {
-        }
+        if (!TryParsePayload(payloadJson, out var payload))
+            return false;
 
-        return false;
+        return TryExtractHookIdFromElement(payload, out hookId);
     }
 
     private static bool TryExtractHookIdFromArgs(string argsJson, out string hookId)
@@ -254,6 +220,23 @@ public sealed class HookStreamManager
     private static bool TryExtractEvents(string? rawResultJson, out string eventsJson)
     {
         eventsJson = string.Empty;
+        if (!TryParsePayload(rawResultJson, out var payload))
+            return false;
+
+        if (payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("events", out var eventsElement) &&
+            eventsElement.ValueKind == JsonValueKind.Array)
+        {
+            eventsJson = eventsElement.GetRawText();
+            return eventsJson.Length > 2;
+        }
+
+        return false;
+    }
+
+    private static bool TryParsePayload(string? rawResultJson, out JsonElement payload)
+    {
+        payload = default;
         if (string.IsNullOrWhiteSpace(rawResultJson))
             return false;
 
@@ -265,21 +248,49 @@ public sealed class HookStreamManager
                 var item = doc.RootElement[0];
                 if (item.TryGetProperty("text", out var textElement) && textElement.ValueKind == JsonValueKind.String)
                 {
-                    var payload = textElement.GetString();
-                    if (string.IsNullOrWhiteSpace(payload))
+                    var text = textElement.GetString();
+                    if (string.IsNullOrWhiteSpace(text))
                         return false;
 
-                    using var payloadDoc = JsonDocument.Parse(payload);
-                    if (payloadDoc.RootElement.TryGetProperty("events", out var eventsElement) && eventsElement.ValueKind == JsonValueKind.Array)
-                    {
-                        eventsJson = eventsElement.GetRawText();
-                        return eventsJson.Length > 2;
-                    }
+                    using var payloadDoc = JsonDocument.Parse(text);
+                    payload = UnwrapPayload(payloadDoc.RootElement);
+                    return true;
                 }
+            }
+            else if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                payload = UnwrapPayload(doc.RootElement);
+                return true;
             }
         }
         catch (JsonException)
         {
+        }
+
+        return false;
+    }
+
+    private static JsonElement UnwrapPayload(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object &&
+            root.TryGetProperty("ok", out var okElement) &&
+            okElement.ValueKind == JsonValueKind.True &&
+            root.TryGetProperty("data", out var dataElement))
+            return dataElement.Clone();
+
+        return root.Clone();
+    }
+
+    private static bool TryExtractHookIdFromElement(JsonElement payload, out string hookId)
+    {
+        hookId = string.Empty;
+        if (payload.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (payload.TryGetProperty("hookId", out var hookElement) && hookElement.ValueKind == JsonValueKind.String)
+        {
+            hookId = hookElement.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(hookId);
         }
 
         return false;

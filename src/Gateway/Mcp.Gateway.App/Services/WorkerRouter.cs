@@ -2,6 +2,7 @@ using Grpc.Net.Client;
 using Mcp.Gateway.App.Options;
 using Mcp.Gateway.Core;
 using Mcp.Workers.Protocol;
+using System.Text.Json;
 
 namespace Mcp.Gateway.App.Services;
 
@@ -78,7 +79,7 @@ public sealed class WorkerRouter : IMcpToolProvider, IWorkerToolInvoker
         {
             await RefreshToolsAsync(force: true, cancellationToken);
             if (!_toolRoutes.TryGetValue(name, out route))
-                return new McpToolCallResult(null, $"Arac bulunamadi: {name}", true);
+                return new McpToolCallResult(BuildErrorContent(BuildErrorPayload("NOT_FOUND", $"Arac bulunamadi: {name}")), null, true);
         }
 
         var request = new InvokeToolRequest
@@ -94,14 +95,14 @@ public sealed class WorkerRouter : IMcpToolProvider, IWorkerToolInvoker
             var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs > 0 ? timeoutMs : 10000);
             var reply = await route.Worker.Client.InvokeToolAsync(request, deadline: deadline, cancellationToken: cancellationToken);
             if (!string.IsNullOrWhiteSpace(reply.Error))
-                return new McpToolCallResult(null, reply.Error, true);
+                return new McpToolCallResult(BuildErrorContent(NormalizeErrorPayload(reply.Error, "RUNTIME")), null, true);
 
             return new McpToolCallResult(reply.ResultJson, null, false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Arac cagirma hatasi: {Tool}", name);
-            return new McpToolCallResult(null, ex.Message, true);
+            return new McpToolCallResult(BuildErrorContent(BuildErrorPayload("RUNTIME", ex.Message)), null, true);
         }
     }
 
@@ -159,4 +160,45 @@ public sealed class WorkerRouter : IMcpToolProvider, IWorkerToolInvoker
 
         return $"{options.ToolPrefix}{toolName}";
     }
+
+    private static string BuildErrorPayload(string kind, string detail)
+        => JsonSerializer.Serialize(new { ok = false, error = new { kind, detail } });
+
+    private static string NormalizeErrorPayload(string errorText, string fallbackKind)
+    {
+        if (string.IsNullOrWhiteSpace(errorText))
+            return BuildErrorPayload(fallbackKind, "bos hata");
+
+        if (LooksLikeErrorPayload(errorText))
+            return errorText;
+
+        return BuildErrorPayload(fallbackKind, errorText);
+    }
+
+    private static bool LooksLikeErrorPayload(string text)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (doc.RootElement.TryGetProperty("ok", out var okElement) && okElement.ValueKind == JsonValueKind.False)
+                return true;
+
+            return doc.RootElement.TryGetProperty("error", out _);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string BuildErrorContent(string payload)
+    {
+        var content = new[] { new ContentItem("text", payload) };
+        return JsonSerializer.Serialize(content);
+    }
+
+    private sealed record ContentItem(string type, string text);
 }

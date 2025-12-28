@@ -14,4 +14,6 @@ public sealed class FridaSessionStore
     }
 
     public bool TryGetPid(string sessionId, out int pid) => _sessions.TryGetValue(sessionId, out pid);
+
+    public bool RemoveSession(string sessionId) => _sessions.TryRemove(sessionId, out _);
 }

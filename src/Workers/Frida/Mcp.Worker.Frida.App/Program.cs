@@ -8,6 +8,7 @@ var fridaOptions = builder.Configuration.GetSection("Frida").Get<FridaOptions>()
 builder.Services.AddSingleton(fridaOptions);
 builder.Services.AddSingleton<FridaSessionStore>();
 builder.Services.AddSingleton<FridaCli>();
+builder.Services.AddSingleton<FridaSessionManager>();
 builder.Services.AddSingleton<FridaHookManager>();
 builder.Services.AddSingleton<FridaScriptManager>();
 builder.Services.AddSingleton<FridaToolPolicy>();

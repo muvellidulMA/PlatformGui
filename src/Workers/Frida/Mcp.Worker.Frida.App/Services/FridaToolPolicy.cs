@@ -35,6 +35,8 @@ public sealed class FridaToolPolicy
             "set_breakpoint" => "high",
             "read_memory" => "medium",
             "read_string" => "medium",
+            "detach" => "low",
+            "self_test" => "low",
             _ => "low"
         };
 

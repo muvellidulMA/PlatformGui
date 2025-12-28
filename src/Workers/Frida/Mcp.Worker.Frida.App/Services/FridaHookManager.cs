@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using Mcp.Worker.Frida.App.Options;
 
 namespace Mcp.Worker.Frida.App.Services;
@@ -23,6 +24,8 @@ public sealed class FridaHookManager
         public Process Process { get; }
         public string ScriptPath { get; }
         public bool AutoStopOnFirstEvent { get; }
+        public bool IsExited { get; set; }
+        public int ExitCode { get; set; }
         public ConcurrentQueue<string> Events { get; } = new();
         public CancellationTokenSource Cancellation { get; } = new();
     }
@@ -35,6 +38,7 @@ public sealed class FridaHookManager
     {
         _options = options;
         _logger = logger;
+        CleanupTempFiles("frida_hook_", TimeSpan.FromHours(24));
     }
 
     public string StartHook(int pid, string scriptSource, bool autoStopOnFirstEvent = false)
@@ -46,6 +50,9 @@ public sealed class FridaHookManager
         var process = StartHookerProcess(pid, scriptPath);
         var hook = new HookInstance(hookId, pid, process, scriptPath, autoStopOnFirstEvent);
         _hooks[hookId] = hook;
+
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => OnProcessExit(hook);
 
         _ = Task.Run(() => ReadOutputAsync(hook));
         _ = Task.Run(() => ReadErrorAsync(hook));
@@ -70,6 +77,12 @@ public sealed class FridaHookManager
         if (hook.AutoStopOnFirstEvent && list.Count > 0)
             StopHook(hookId);
 
+        if (hook.IsExited && hook.Events.IsEmpty)
+        {
+            if (_hooks.TryRemove(hookId, out var removed))
+                FinalizeHook(removed);
+        }
+
         return list;
     }
 
@@ -78,11 +91,27 @@ public sealed class FridaHookManager
         if (!_hooks.TryRemove(hookId, out var hook))
             return false;
 
+        FinalizeHook(hook);
+        return true;
+    }
+
+    private void OnProcessExit(HookInstance hook)
+    {
+        if (hook.IsExited)
+            return;
+
+        hook.IsExited = true;
+        hook.ExitCode = hook.Process.HasExited ? hook.Process.ExitCode : -1;
+        hook.Events.Enqueue(JsonSerializer.Serialize(new { type = "process_exit", hookId = hook.HookId, pid = hook.Pid, exitCode = hook.ExitCode }));
+        hook.Cancellation.Cancel();
+    }
+
+    private static void FinalizeHook(HookInstance hook)
+    {
         hook.Cancellation.Cancel();
         TryKill(hook.Process);
         hook.Cancellation.Dispose();
         TryDelete(hook.ScriptPath);
-        return true;
     }
 
     private Process StartHookerProcess(int pid, string scriptPath)
@@ -201,6 +230,31 @@ public sealed class FridaHookManager
         {
             if (File.Exists(path))
                 File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void CleanupTempFiles(string prefix, TimeSpan maxAge)
+    {
+        try
+        {
+            var temp = Path.GetTempPath();
+            var files = Directory.GetFiles(temp, $"{prefix}*.js");
+            var cutoff = DateTime.UtcNow - maxAge;
+            foreach (var file in files)
+            {
+                try
+                {
+                    var info = new FileInfo(file);
+                    if (info.LastWriteTimeUtc < cutoff)
+                        info.Delete();
+                }
+                catch
+                {
+                }
+            }
         }
         catch
         {
