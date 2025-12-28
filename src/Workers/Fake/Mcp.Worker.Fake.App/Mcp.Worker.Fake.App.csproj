@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Common\Mcp.Workers.Protocol\Mcp.Workers.Protocol.csproj" />
+  </ItemGroup>
+	
+  <ItemGroup>
+	<PackageReference Include="Grpc.AspNetCore" Version="2.76.0" />
+  </ItemGroup>
+	
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
+

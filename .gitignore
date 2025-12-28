@@ -1,0 +1,35 @@
+# Build
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# IDE
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test results
+TestResults/
+
+# Packages
+packages/
+
+# Rider
+.idea/
+
+# Ngrok binary
+ngrok/ngrok.exe
+
+# Local notes
+*.tmp
+yeni 1.txt

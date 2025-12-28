@@ -1,0 +1,33 @@
+syntax = "proto3";
+option csharp_namespace = "Mcp.Workers.Protocol";
+
+package mcp.workers;
+
+service Worker {
+  rpc ListTools (ListToolsRequest) returns (ListToolsReply);
+  rpc InvokeTool (InvokeToolRequest) returns (InvokeToolReply);
+}
+
+message ListToolsRequest {}
+
+message ToolInfo {
+  string name = 1;
+  string description = 2;
+  string input_schema_json = 3;
+}
+
+message ListToolsReply {
+  repeated ToolInfo tools = 1;
+}
+
+message InvokeToolRequest {
+  string name = 1;
+  string args_json = 2;
+  int32 timeout_ms = 3;
+  string session_id = 4;
+}
+
+message InvokeToolReply {
+  string result_json = 1;
+  string error = 2;
+}
