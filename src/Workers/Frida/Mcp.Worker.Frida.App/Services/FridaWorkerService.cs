@@ -1853,9 +1853,9 @@ namespace Mcp.Worker.Frida.App.Services
             return JsonSerializer.Serialize(new { ok = true, data });
         }
 
-        private static string BuildErrorPayload(string kind, string detail)
+        private static string BuildErrorPayload(string kind, string? detail)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = new { kind, detail } });
+            return JsonSerializer.Serialize(new { ok = false, error = new { kind, detail = detail ?? "bilinmeyen hata" } });
         }
 
         private static InvokeToolReply BuildOkReply(object? data)
@@ -1864,7 +1864,7 @@ namespace Mcp.Worker.Frida.App.Services
         private static InvokeToolReply BuildOkReply(JsonElement data)
             => new InvokeToolReply { ResultJson = BuildTextContent(BuildOkPayload(data)) };
 
-        private static InvokeToolReply BuildErrorReply(string kind, string detail)
+        private static InvokeToolReply BuildErrorReply(string kind, string? detail)
             => new InvokeToolReply { Error = BuildErrorPayload(kind, detail) };
 
         private static string GetErrorKind(Exception ex)
